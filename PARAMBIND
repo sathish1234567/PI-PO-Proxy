@@ -1,0 +1,16 @@
+method si_book_Send.
+  
+  data : ls_parambind type abap_parambind,
+  lt_parambind type abap_parambind_tab.
+  
+  ls_parambind-name = 'OUTPUT'.
+  ls_parambind-kind = cl_abap_objectdescr=>importing.
+  get reference of output into ls_parambind-value.
+  
+  insert ls_parambind into table lt_parambind.
+  
+  if_proxy_client~execute( exporting method_name = 'SI_BOOK_SEND'
+                           changing parmbind_tab = lt_parambind ).
+  
+endmethod.
+
