@@ -1,0 +1,54 @@
+METHOD ii_tim_employeelr_crtrc~execute_synchronous.
+
+Syntax Syntax
+
+* EmployeeLeaveRequestCreateRequestConfirmation_In DATA 
+lv_employeenumber TYPE pernr_d.
+DATA lv_leave_id       TYPE tim_req_id.
+DATA lt_messages       TYPE bapirettab.
+DATA ...
+
+* database updates are done synchronously
+SET UPDATE TASK LOCAL.
+
+* Input Mapping: map proxy input parameters to function module (RFC) input parameters
+CALL METHOD me->input_mapping
+EXPORTING
+  is_input = input "/input format according to proxy ABAP datatype
+IMPORTING
+  ev_employeenumber = lv_employeenumber "/internal format
+  ev_leave_id       = lv_leave_id
+  ev_operationid    = lv_operationid.
+
+* Business logic call
+CALL METHOD me->business_logic
+EXPORTING
+  iv_employeenumber = lv_employeenumber
+  iv_leave_id       = lv_leave_id.
+IMPORTING
+  ev_request_detail = lv_request_detail	"/result from business logic processing
+  ev_success        = lv_success
+  et_messages       = lt_messages. "/ application message table -  
+                                   internal format
+
+* Map application errors table to format of global data type Log
+CALL METHOD cl_proxy_log=>fill
+EXPORTING
+  bapireturn_tab = lt_messages
+IMPORTING
+  log            = output-... .
+EXIT.
+ENDIF.
+
+* Output Mapping: map function module (RFC) output parameters to proxy output parameters
+CALL METHOD me->output_mapping
+EXPORTING
+  iv_request_detail = lv_request_detail
+IMPORTING
+  rs_output = output... . "/ input format according to proxy ABAP 
+                          datatype
+
+* Commit
+cl_soap_commit_rollback=>commit( ).
+
+ENDMETHOD. "ii_tim_employeelr_crtrc~execute_synchronous
