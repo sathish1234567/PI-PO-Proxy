@@ -52,3 +52,129 @@ IMPORTING
 cl_soap_commit_rollback=>commit( ).
 
 ENDMETHOD. "ii_tim_employeelr_crtrc~execute_synchronous
+
+
+
+
+METHOD input_mapping.
+
+Syntax Syntax
+
+DATA wa_participant TYPE LINE OF hrsef_employeelr_crt_req_msg-employee_leave_request-participant.
+DATA lt_messages    TYPE bapirettab.
+...
+
+* Mapping employee numbers
+LOOP AT is_input-employee_leave_request_create-employee_leave_request-participant INTO wa_participant.
+  CASE wa_participant-role_code-value.
+    WHEN cl_tim_proxy_constants=>participant_role_owner.
+      ev_employeenumber = wa_participant-work_agreement_id-value.
+      ...
+  ENDCASE.
+ENDLOOP.
+...
+
+* Mapping LeaveID and ActionCode
+CALL METHOD cl_tim_leave_proxy_mappings=>time_ref_input_mapping
+EXPORTING
+  is_proxy_time_ref  = is_input-employee_leave_request_create-
+                       employee_leave_request-
+                       leave_employee_time_reference
+IMPORTING
+  ev_fm_leave_id     = ev_leave_id
+  ev_fm_operation_id = ev_operationid
+  et_messages        = lt_messages.
+
+APPEND LINES OF lt_messages TO et_messages.
+...
+
+ENDMETHOD. "input_mapping
+
+
+
+Business Logic
+METHOD business_logic.
+
+Syntax Syntax
+
+DATA : lv_pernr    TYPE pernr_d.
+DATA : lt_messages TYPE bapirettab.
+
+lv_pernr  =  iv_employeenumber.
+
+*** If owner pernr is not supplied, use the pernr of the user who is invoking the service
+  IF iv_employeenumber IS INITIAL.
+
+    CALL FUNCTION 'PAD_EMPLOYEENUMBERS_GET_LIST'
+    EXPORTING
+      iv_username        = sy-uname
+      iv_key_date        = sy-datum
+    IMPORTING
+      ev_employee_number = lv_pernr
+    TABLES
+      t_messages_out     = lt_messages.
+
+    IF NOT lt_messages IS INITIAL.
+      APPEND LINES OF lt_messages TO et_messages.
+      RETURN.
+    ENDIF.
+
+  ENDIF.
+
+
+CALL FUNCTION 'PT_ESA_REQUEST_CREATE'
+EXPORTING
+  iv_employee_number      = lv_pernr
+  iv_leave_id             = iv_leave_id
+  iv_oparation_id         = iv_operationid
+  iv_leave_request        = iv_requestdetail
+IMPORTING
+  ev_request_detail       = ev_request_detail
+  ev_success_confirmation = ev_success
+TABLES
+  et_messages             = et_messages.
+
+ENDMETHOD.
+
+
+
+Output Mapping
+METHOD output_mapping
+
+Syntax Syntax
+
+DATA ls_participant       TYPE ptesa_actor_struc.
+DATA ls_proxy_participant TYPE hrsef_employee_leave_request13.
+DATA ls_time_item         TYPE hrsef_employee_leave_request10.
+DATA lv_owner             TYPE pernr_d.
+...
+
+* Participant table
+LOOP AT iv_request_detail-participant INTO ls_participant.
+  CALL METHOD cl_tim_leave_proxy_mappings=>participant_output_mapping
+    EXPORTING
+      is_fm_participant    = ls_participant
+    IMPORTING
+      ev_owner             = lv_owner
+      es_proxy_participant = ls_proxy_participant.
+
+  IF NOT ls_proxy_participant IS INITIAL.
+    APPEND ls_proxy_participant TO rs_output-
+           employee_leave_request_create-employee_leave_request-
+           participant.
+  ENDIF.
+ENDLOOP.
+...
+
+* Time item table
+CALL METHOD cl_tim_leave_proxy_mappings=>item_output_mapping
+EXPORTING
+  iv_pernr      = lv_owner
+  is_fm_item    = iv_request_detail-item
+IMPORTING
+  es_proxy_item = ls_time_item.
+
+APPEND ls_time_item TO rs_output-employee_leave_request_create-
+       employee_leave_request-leave_employee_time_item.
+
+ENDMETHOD. "output_mapping
